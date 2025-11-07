@@ -22,6 +22,8 @@ Lista de Plantas: tabela com informações e ações.
 
 Autenticação: login e registro de usuários.
 
+Calendário de cuidados.
+
 
 Tecnologias
 --------------------------------------------------------------
