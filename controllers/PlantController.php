@@ -365,8 +365,7 @@ class PlantController {
         $userId = $this->getUserId();
         $plantId = filter_input(INPUT_GET, 'plant_id', FILTER_VALIDATE_INT);
         
-        // Aqui você pode implementar lógica para marcar notificações como lidas
-        // Por enquanto, apenas redireciona com mensagem
+        
         $_SESSION['success_message'] = "Notificações atualizadas.";
         header('Location: ' . BASE_URL . '?route=dashboard');
         exit;

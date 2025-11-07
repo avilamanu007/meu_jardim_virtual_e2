@@ -73,7 +73,7 @@ class CareController {
         if (empty($careData['plant_id'])) {
             $errors[] = "Selecione uma planta.";
         } else {
-            // ✅ CORREÇÃO: Usar método que realmente existe no PlantModel
+            
             $userPlants = $this->plantModel->getAllPlantsByUserId($userId);
             $plantExists = false;
             foreach ($userPlants as $plant) {
@@ -103,7 +103,7 @@ class CareController {
             }
         }
 
-        // ✅ CORREÇÃO: Calcular próxima manutenção apenas se não foi fornecida
+        
         if (empty($errors) && empty($careData['next_maintenance_date']) && !empty($careData['care_type']) && !empty($careData['care_date'])) {
             $careData['next_maintenance_date'] = $this->calculateNextMaintenance(
                 $careData['care_type'], 
@@ -112,7 +112,7 @@ class CareController {
             error_log("CareController - Próxima manutenção calculada: " . $careData['next_maintenance_date']);
         }
 
-        // ✅ CORREÇÃO: Validar se a próxima data foi calculada ou fornecida
+        
         if (empty($errors) && empty($careData['next_maintenance_date'])) {
             $errors[] = "Não foi possível calcular a próxima data de manutenção.";
         }
@@ -185,7 +185,7 @@ class CareController {
         }
     }
 
-    // ✅ MÉTODO NOVO: Detalhes de um cuidado específico
+    
     public function detail($careId) {
         $userId = $this->getUserId();
         
@@ -209,13 +209,7 @@ class CareController {
         require 'views/protected/care/care_detail.php';
     }
 
-    // =========================================================================
-    // ✅ MÉTODOS NOVOS PARA BAIXA DE PENDÊNCIAS
-    // =========================================================================
-
-    /**
-     * ✅ NOVO: Lista todos os cuidados pendentes do usuário
-     */
+   
     public function pending() {
         $userId = $this->getUserId();
         
@@ -235,9 +229,7 @@ class CareController {
         }
     }
 
-    /**
-     * ✅ NOVO: Registra a execução de um cuidado pendente (dar baixa)
-     */
+ 
     public function complete() {
         $userId = $this->getUserId();
         
@@ -279,9 +271,7 @@ class CareController {
         exit;
     }
 
-    /**
-     * ✅ NOVO: Estatísticas de cuidados (para dashboard futuro)
-     */
+ 
     public function stats() {
         $userId = $this->getUserId();
         
@@ -300,9 +290,7 @@ class CareController {
         }
     }
 
-    /**
-     * ✅ NOVO: Editar um cuidado existente
-     */
+   
     public function edit($careId) {
         $userId = $this->getUserId();
         $errors = [];
@@ -360,9 +348,7 @@ class CareController {
         require 'views/protected/care/care_edit.php';
     }
 
-    /**
-     * ✅ NOVO: Excluir um cuidado
-     */
+    
     public function delete($careId) {
         $userId = $this->getUserId();
         
@@ -406,4 +392,90 @@ class CareController {
         header('Location: ' . BASE_URL . '?route=care_pending');
         exit;
     }
+
+    public function calendar() {
+    try {
+        $userId = $_SESSION['user_id'];
+        $careModel = new CareModel($this->db);
+        $plantModel = new PlantModel($this->db);
+        
+        // Buscar dados para o calendário
+        $upcomingCares = $careModel->getUpcomingCares($userId, 90);
+        $recentCares = $careModel->getCaresByUserId($userId);
+        $plants = $plantModel->getAllPlantsByUserId($userId);
+
+        // Preparar eventos para o calendário
+        $calendarEvents = [];
+        
+        
+        foreach ($recentCares as $care) {
+            $calendarEvents[] = [
+                'id' => 'care_' . $care['id'],
+                'title' => '✅ ' . $care['care_type'] . ' - ' . $care['plant_name'],
+                'start' => $care['care_date'],
+                'color' => '#10B981',
+                'type' => 'care_done',
+                'plant_name' => $care['plant_name'],
+                'care_type' => $care['care_type'],
+                'observations' => $care['observations'] ?? ''
+            ];
+        }
+        
+        
+        foreach ($upcomingCares as $care) {
+            $nextDate = $care['next_maintenance_date'] ?? null;
+            if ($nextDate) {
+                $isOverdue = strtotime($nextDate) < strtotime(date('Y-m-d'));
+                $calendarEvents[] = [
+                    'id' => 'upcoming_' . $care['id'],
+                    'title' => '📅 ' . $care['care_type'] . ' - ' . $care['plant_name'],
+                    'start' => $nextDate,
+                    'color' => $isOverdue ? '#EF4444' : '#3B82F6',
+                    'type' => 'care_upcoming',
+                    'plant_name' => $care['plant_name'],
+                    'care_type' => $care['care_type'],
+                    'days_until' => $care['days_until'] ?? 0,
+                    'is_overdue' => $isOverdue
+                ];
+            }
+        }
+        
+        
+        foreach ($plants as $plant) {
+            // Verificar se a chave existe e tem valor válido
+            $wateringDate = $plant['next_watering_date'] ?? null;
+            if ($wateringDate && !empty($wateringDate) && $wateringDate !== '0000-00-00') {
+                $isOverdue = strtotime($wateringDate) < strtotime(date('Y-m-d'));
+                $calendarEvents[] = [
+                    'id' => 'water_' . $plant['id'],
+                    'title' => '💧 Rega - ' . $plant['name'],
+                    'start' => $wateringDate,
+                    'color' => $isOverdue ? '#F59E0B' : '#06B6D4',
+                    'type' => 'watering',
+                    'plant_name' => $plant['name'],
+                    'care_type' => 'Regar'
+                ];
+            }
+        }
+        
+        // Carregar a view do calendário
+        $pageTitle = 'Calendário de Cuidados';
+        ob_start();
+        include 'views/calendar/index.php';
+        $content = ob_get_clean();
+        
+        // Incluir o template principal
+        include 'views/includes/header.php';
+        echo $content;
+        include 'views/includes/footer.php';
+        
+    } catch (Exception $e) {
+        error_log("Erro no calendário: " . $e->getMessage());
+        $_SESSION['error_message'] = "Erro ao carregar o calendário.";
+        header('Location: ' . BASE_URL . '?route=dashboard');
+        exit;
+    }
+}
+
+    
 }

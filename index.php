@@ -37,8 +37,29 @@ require 'controllers/HomeController.php'; // Controller da Home
 
 // --- Lógica de Roteamento ---
 
-// 4. Define a rota: usa o valor de 'route' ou determina a rota padrão
+// 4. CORREÇÃO: Captura da rota de forma mais amigável
 $route = $_GET['route'] ?? '';
+
+// Se não veio pela query string, tenta capturar pela URL
+if (empty($route)) {
+    $request_uri = $_SERVER['REQUEST_URI'];
+    
+    // Remove a base URL se existir
+    $base_path = parse_url(BASE_URL, PHP_URL_PATH);
+    if ($base_path && strpos($request_uri, $base_path) === 0) {
+        $request_uri = substr($request_uri, strlen($base_path));
+    }
+    
+    // Remove a query string e barras extras
+    $request_uri = parse_url($request_uri, PHP_URL_PATH);
+    $route = trim($request_uri, '/');
+    
+    // Remove 'index.php' se estiver na URL
+    if (strpos($route, 'index.php') === 0) {
+        $route = substr($route, strlen('index.php'));
+        $route = trim($route, '/');
+    }
+}
 
 // Roteamento Padrão: Se a rota estiver vazia, define 'home' ou 'login'.
 if (isset($_SESSION['user_id']) && empty($route)) {
@@ -47,7 +68,7 @@ if (isset($_SESSION['user_id']) && empty($route)) {
     $route = 'login';
 }
 
-// 5. Executa o Controlador e a Ação
+// 5. Executa o Controlador e a Ação (TODO O RESTO DO CÓDIGO PERMANECE IGUAL)
 switch ($route) {
     // --- Rotas de Autenticação (UserController) ---
     case 'login':
@@ -60,7 +81,7 @@ switch ($route) {
         (new UserController($db))->logout();
         break;
 
-    // --- NOVA ROTA: HOME (HomeController) ---
+    // --- ROTA: HOME (HomeController) ---
     case 'home':
         // Rota protegida: Requer que o usuário esteja logado
         if (!isset($_SESSION['user_id'])) {
@@ -72,35 +93,114 @@ switch ($route) {
 
     // --- Rotas de Gestão de Plantas (PlantController) ---
     case 'dashboard':
+        // Rota protegida: Requer que o usuário esteja logado
+        if (!isset($_SESSION['user_id'])) {
+            header('Location: ' . BASE_URL . '?route=login');
+            exit;
+        }
+        (new PlantController($db))->index(); // Listagem de plantas (Dashboard)
+        break;
+        
     case 'plant_register':
-    case 'plant_details':
-    case 'plant_edit':
-    case 'plant_delete':
-        // Rotas protegidas: Requerem que o usuário esteja logado
+        // Rota protegida: Requer que o usuário esteja logado
         if (!isset($_SESSION['user_id'])) {
             header('Location: ' . BASE_URL . '?route=login');
             exit;
         }
         $controller = new PlantController($db);
-        if ($route === 'dashboard') {
-            $controller->index(); // Listagem de plantas (Dashboard)
-        } elseif ($route === 'plant_register') {
-            // CORREÇÃO: Tenta create() primeiro, depois register() como fallback
-            if (method_exists($controller, 'create')) {
-                $controller->create(); // Formulário de Cadastro de Planta
-            } elseif (method_exists($controller, 'register')) {
-                $controller->register(); // Fallback para register()
+        
+        // CORREÇÃO: Lógica simplificada e padronizada
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // Se for POST, processa o cadastro
+            if (method_exists($controller, 'store')) {
+                $controller->store();
+            } elseif (method_exists($controller, 'create')) {
+                $controller->create(); // Fallback para create se store não existir
             } else {
-                // Se nenhum método existir, mostra erro
-                die("Erro: Método para cadastro de planta não encontrado no PlantController");
+                $_SESSION['error_message'] = "Método para processar cadastro não encontrado.";
+                header('Location: ' . BASE_URL . '?route=dashboard');
+                exit;
             }
-        } elseif ($route === 'plant_details') {
-            $controller->show();
-        } elseif ($route === 'plant_edit') {
-            $controller->edit();
-        } elseif ($route === 'plant_delete') {
-            $controller->delete();
+        } else {
+            // Se for GET, mostra o formulário
+            if (method_exists($controller, 'create')) {
+                $controller->create();
+            } elseif (method_exists($controller, 'register')) {
+                $controller->register(); // Fallback para register
+            } else {
+                $_SESSION['error_message'] = "Método para mostrar formulário não encontrado.";
+                header('Location: ' . BASE_URL . '?route=dashboard');
+                exit;
+            }
         }
+        break;
+        
+    case 'plant_details':
+        // Rota protegida: Requer que o usuário esteja logado
+        if (!isset($_SESSION['user_id'])) {
+            header('Location: ' . BASE_URL . '?route=login');
+            exit;
+        }
+        // Valida se o ID da planta foi fornecido
+        $plantId = $_GET['id'] ?? null;
+        if (!$plantId) {
+            $_SESSION['error_message'] = "ID da planta não informado.";
+            header('Location: ' . BASE_URL . '?route=dashboard');
+            exit;
+        }
+        (new PlantController($db))->show($plantId);
+        break;
+        
+    case 'plant_edit':
+        // Rota protegida: Requer que o usuário esteja logado
+        if (!isset($_SESSION['user_id'])) {
+            header('Location: ' . BASE_URL . '?route=login');
+            exit;
+        }
+        // Valida se o ID da planta foi fornecido
+        $plantId = $_GET['id'] ?? null;
+        if (!$plantId) {
+            $_SESSION['error_message'] = "ID da planta não informado.";
+            header('Location: ' . BASE_URL . '?route=dashboard');
+            exit;
+        }
+        $controller = new PlantController($db);
+        
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // Se for POST, processa a edição
+            if (method_exists($controller, 'update')) {
+                $controller->update($plantId);
+            } else {
+                $_SESSION['error_message'] = "Método para atualizar planta não encontrado.";
+                header('Location: ' . BASE_URL . '?route=plant_edit&id=' . $plantId);
+                exit;
+            }
+        } else {
+            // Se for GET, mostra o formulário de edição
+            if (method_exists($controller, 'edit')) {
+                $controller->edit($plantId);
+            } else {
+                $_SESSION['error_message'] = "Método para editar planta não encontrado.";
+                header('Location: ' . BASE_URL . '?route=dashboard');
+                exit;
+            }
+        }
+        break;
+        
+    case 'plant_delete':
+        // Rota protegida: Requer que o usuário esteja logado
+        if (!isset($_SESSION['user_id'])) {
+            header('Location: ' . BASE_URL . '?route=login');
+            exit;
+        }
+        // Valida se o ID da planta foi fornecido
+        $plantId = $_POST['plant_id'] ?? $_GET['id'] ?? null;
+        if (!$plantId) {
+            $_SESSION['error_message'] = "ID da planta não informado.";
+            header('Location: ' . BASE_URL . '?route=dashboard');
+            exit;
+        }
+        (new PlantController($db))->delete($plantId);
         break;
 
     // --- Rotas: Gestão de Cuidados (CareController) ---
@@ -111,6 +211,7 @@ switch ($route) {
     case 'care_stats':
     case 'care_edit':
     case 'care_delete':
+    case 'calendar':
         // Rotas protegidas: Requerem que o usuário esteja logado
         if (!isset($_SESSION['user_id'])) {
             header('Location: ' . BASE_URL . '?route=login');
@@ -122,13 +223,13 @@ switch ($route) {
         } elseif ($route === 'care_history') {
             $controller->history(); // Histórico de cuidados de uma planta
         } elseif ($route === 'care_pending') {
-            $controller->pending(); // ✅ NOVO: Lista de cuidados pendentes
+            $controller->pending(); // Lista de cuidados pendentes
         } elseif ($route === 'care_complete') {
-            $controller->complete(); // ✅ NOVO: Dar baixa em cuidado
+            $controller->complete(); // Dar baixa em cuidado
         } elseif ($route === 'care_stats') {
-            $controller->stats(); // ✅ NOVO: Estatísticas de cuidados
+            $controller->stats(); // Estatísticas de cuidados
         } elseif ($route === 'care_edit') {
-            // ✅ NOVO: Editar cuidado - precisa do ID
+            // Editar cuidado - precisa do ID
             $careId = $_GET['id'] ?? null;
             if (!$careId) {
                 $_SESSION['error_message'] = "ID do cuidado não informado.";
@@ -137,7 +238,7 @@ switch ($route) {
             }
             $controller->edit($careId);
         } elseif ($route === 'care_delete') {
-            // ✅ NOVO: Excluir cuidado - precisa do ID
+            // Excluir cuidado - precisa do ID
             $careId = $_POST['care_id'] ?? $_GET['id'] ?? null;
             if (!$careId) {
                 $_SESSION['error_message'] = "ID do cuidado não informado.";
@@ -145,6 +246,8 @@ switch ($route) {
                 exit;
             }
             $controller->delete($careId);
+        } elseif ($route === 'calendar') {
+            $controller->calendar(); // Calendário de cuidados
         }
         break;
         

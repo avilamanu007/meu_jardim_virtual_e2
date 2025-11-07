@@ -96,6 +96,11 @@ $pageTitle = $pageTitle ?? (defined('APP_NAME') ? APP_NAME : 'Meu Projeto');
                         <a href="<?= BASE_URL ?>?route=care_register" class="text-gray-600 hover:text-green-700 font-medium">
                             Registrar Cuidado
                         </a>
+
+                        <a href="<?= BASE_URL ?>?route=calendar" class="text-gray-600 hover:text-green-700 font-medium">
+                             Calendário
+                        </a>
+
                     </nav>
                 </div>
                 

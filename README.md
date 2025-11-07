@@ -60,8 +60,3 @@ define('DB_PASS', 'sua_senha');
 
 Acesse no navegador: http://localhost/meu_jardim_virtual e registre um usuário.
 -----------------------------------------------------------
- Melhorias Futuras
-
-Relatórios avançados e gráficos
-
-Busca e filtros avançados
